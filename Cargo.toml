@@ -7,18 +7,26 @@ license = "Apache-2.0"
 repository = "https://github.com/acuteenvy/readpass"
 documentation = "https://docs.rs/readpass"
 categories = ["command-line-interface"]
-keywords = [
-    "read",
-    "password",
-    "security",
-    "pass",
-    "getpass",
-]
+keywords = ["read", "password", "security", "pass", "getpass"]
 edition = "2021"
 rust-version = "1.63"
 
 [dependencies]
+tokio = { version = "1.38.2", features = [
+  "fs",
+  "io-std",
+  "io-util",
+], optional = true }
 zeroize = "1.8"
+
+[dev-dependencies]
+tokio = { version = "1.38.2", features = [
+  "fs",
+  "io-std",
+  "io-util",
+  "rt",
+  "macros",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -26,14 +34,17 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.60"
 features = [
-    "Win32_Foundation",
-    "Win32_System_Console",
-    "Win32_Storage_FileSystem",
-    "Win32_Security",
-    "Win32_System_SystemServices"
+  "Win32_Foundation",
+  "Win32_System_Console",
+  "Win32_Storage_FileSystem",
+  "Win32_Security",
+  "Win32_System_SystemServices",
 ]
 
 [lints.clippy]
 all = "warn"
 pedantic = "warn"
 style = "warn"
+
+[features]
+tokio = ["dep:tokio"]

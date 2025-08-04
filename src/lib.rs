@@ -33,6 +33,8 @@ compile_error!("only Unix-like OSes and Windows are supported!");
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod sys;
+#[cfg(feature = "tokio")]
+pub use sys::async_from_tty;
 pub use sys::from_tty;
 
 const CTRL_U: char = 21 as char;
@@ -55,6 +57,36 @@ fn from_bufread(reader: &mut impl BufRead) -> io::Result<Zeroizing<String>> {
     };
 
     Ok(password)
+}
+
+#[cfg(feature = "tokio")]
+pub(crate) use async_support::async_from_bufread;
+#[cfg(feature = "tokio")]
+mod async_support {
+    use tokio::io::AsyncBufReadExt;
+    use zeroize::Zeroizing;
+
+    use crate::CTRL_U;
+
+    pub(crate) async fn async_from_bufread(
+        reader: &mut (impl AsyncBufReadExt + Unpin),
+    ) -> std::io::Result<Zeroizing<String>> {
+        let mut password = Zeroizing::new(String::new());
+        reader.read_line(&mut password).await?;
+
+        let len = password.trim_end_matches(&['\r', '\n'][..]).len();
+        password.truncate(len);
+
+        // Ctrl-U should remove the line in terminals.
+        password = match password.rfind(CTRL_U) {
+            Some(last_ctrl_u_index) => {
+                Zeroizing::new(password[last_ctrl_u_index + 1..].to_string())
+            }
+            None => password,
+        };
+
+        Ok(password)
+    }
 }
 
 #[cfg(test)]
@@ -131,6 +163,102 @@ mod tests {
         let s = format!("A mocked response.{}\n", super::CTRL_U);
         let mut reader_ctrl_u_at_end = Cursor::new(s.as_bytes());
         let response = super::from_bufread(&mut reader_ctrl_u_at_end).unwrap();
+        assert_eq!(*response, "");
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "tokio")]
+mod tokio_tests {
+    use std::io::Cursor;
+
+    fn mock_input_crlf() -> Cursor<&'static [u8]> {
+        Cursor::new(&b"A mocked response.\r\nAnother mocked response.\r\n"[..])
+    }
+
+    fn mock_input_lf() -> Cursor<&'static [u8]> {
+        Cursor::new(&b"A mocked response.\nAnother mocked response.\n"[..])
+    }
+
+    #[tokio::test]
+    async fn can_read_from_redirected_input_many_times_test() {
+        let mut reader_crlf = mock_input_crlf();
+
+        let response = super::async_from_bufread(&mut reader_crlf).await.unwrap();
+        assert_eq!(*response, "A mocked response.");
+        let response = super::async_from_bufread(&mut reader_crlf).await.unwrap();
+        assert_eq!(*response, "Another mocked response.");
+
+        let mut reader_lf = mock_input_lf();
+        let response = super::async_from_bufread(&mut reader_lf).await.unwrap();
+        assert_eq!(*response, "A mocked response.");
+        let response = super::async_from_bufread(&mut reader_lf).await.unwrap();
+        assert_eq!(*response, "Another mocked response.");
+    }
+
+    async fn can_read_from_redirected_input_many_times() {
+        let mut reader_crlf = mock_input_crlf();
+
+        let response = super::async_from_bufread(&mut reader_crlf).await.unwrap();
+        assert_eq!(*response, "A mocked response.");
+        let response = super::async_from_bufread(&mut reader_crlf).await.unwrap();
+        assert_eq!(*response, "Another mocked response.");
+
+        let mut reader_lf = mock_input_lf();
+        let response = super::async_from_bufread(&mut reader_lf).await.unwrap();
+        assert_eq!(*response, "A mocked response.");
+        let response = super::async_from_bufread(&mut reader_lf).await.unwrap();
+        assert_eq!(*response, "Another mocked response.");
+    }
+
+    // These tests check whether or not we can read from a reader when
+    // stdin is not a terminal.
+
+    #[cfg(unix)]
+    fn close_stdin() {
+        unsafe {
+            libc::close(libc::STDIN_FILENO);
+        }
+    }
+
+    #[cfg(windows)]
+    fn close_stdin() {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE};
+
+        unsafe {
+            CloseHandle(GetStdHandle(STD_INPUT_HANDLE));
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn close_stdin() {
+        unimplemented!()
+    }
+
+    #[tokio::test]
+    async fn can_read_from_redirected_input_many_times_nostdin() {
+        close_stdin();
+        can_read_from_redirected_input_many_times().await;
+    }
+
+    #[tokio::test]
+    async fn can_read_from_input_ctrl_u() {
+        close_stdin();
+
+        let s = format!(
+            "A mocked response.{}Another mocked response.\n",
+            super::CTRL_U
+        );
+        let mut reader_ctrl_u = Cursor::new(s.as_bytes());
+        let response = super::async_from_bufread(&mut reader_ctrl_u).await.unwrap();
+        assert_eq!(*response, "Another mocked response.");
+
+        let s = format!("A mocked response.{}\n", super::CTRL_U);
+        let mut reader_ctrl_u_at_end = Cursor::new(s.as_bytes());
+        let response = super::async_from_bufread(&mut reader_ctrl_u_at_end)
+            .await
+            .unwrap();
         assert_eq!(*response, "");
     }
 }

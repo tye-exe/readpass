@@ -66,3 +66,22 @@ pub fn from_tty() -> io::Result<Zeroizing<String>> {
     let _hidden_input = HiddenInput::new(fd)?;
     crate::from_bufread(&mut reader)
 }
+
+#[cfg(feature = "tokio")]
+pub use async_support::async_from_tty;
+#[cfg(feature = "tokio")]
+mod async_support {
+    use crate::sys::HiddenInput;
+    use std::os::fd::AsRawFd;
+    use tokio::{fs::File, io::BufReader};
+    use zeroize::Zeroizing;
+
+    pub async fn async_from_tty() -> std::io::Result<Zeroizing<String>> {
+        let tty = File::open("/dev/tty").await?;
+        let fd = tty.as_raw_fd();
+        let mut reader = BufReader::new(tty);
+
+        let _hidden_input = HiddenInput::new(fd)?;
+        crate::async_from_bufread(&mut reader).await
+    }
+}
