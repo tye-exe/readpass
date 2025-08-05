@@ -78,3 +78,39 @@ pub fn from_tty() -> io::Result<Zeroizing<String>> {
     io::stdout().write_all(b"\n")?;
     reader_return
 }
+
+#[cfg(feature = "tokio")]
+pub use async_support::async_from_tty;
+#[cfg(feature = "tokio")]
+mod async_support {
+    use super::*;
+    use tokio::{fs::File, io::BufReader};
+    use zeroize::Zeroizing;
+
+    pub async fn async_from_tty() -> std::io::Result<Zeroizing<String>> {
+        let handle = unsafe {
+            CreateFileA(
+                b"CONIN$\x00".as_ptr() as PCSTR,
+                GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                0,
+                INVALID_HANDLE_VALUE,
+            )
+        };
+
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+
+        let mut reader = BufReader::new(unsafe { File::from_raw_handle(handle as _) });
+
+        let _hidden_input = HiddenInput::new(handle)?;
+        let reader_return = crate::async_from_bufread(&mut reader).await;
+
+        // Print a newline on Windows (otherwise whatever is printed next will be on the same line).
+        io::stdout().write_all(b"\n")?;
+        reader_return
+    }
+}
