@@ -9,10 +9,10 @@ documentation = "https://docs.rs/readpass"
 categories = ["command-line-interface"]
 keywords = ["read", "password", "security", "pass", "getpass"]
 edition = "2021"
-rust-version = "1.63"
+rust-version = "1.70"
 
 [dependencies]
-tokio = { version = "1.38.2", features = [
+tokio = { version = "1.39", features = [
   "fs",
   "io-std",
   "io-util",
@@ -20,7 +20,7 @@ tokio = { version = "1.38.2", features = [
 zeroize = "1.8"
 
 [dev-dependencies]
-tokio = { version = "1.38.2", features = [
+tokio = { version = "1.39", features = [
   "fs",
   "io-std",
   "io-util",
