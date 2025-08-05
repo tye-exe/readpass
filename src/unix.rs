@@ -76,6 +76,13 @@ mod async_support {
     use tokio::{fs::File, io::BufReader};
     use zeroize::Zeroizing;
 
+    /// Asynchronously reads a password from the TTY.
+    ///
+    /// Newlines and carriage returns are trimmed from the end of the resulting `String`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an I/O error if reading from `/dev/tty` fails.
     pub async fn async_from_tty() -> std::io::Result<Zeroizing<String>> {
         let tty = File::open("/dev/tty").await?;
         let fd = tty.as_raw_fd();

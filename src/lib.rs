@@ -20,6 +20,37 @@
 //! # Ok::<(), io::Error>(())
 //!```
 //!
+//! ## Tokio
+#![cfg_attr(
+    not(feature = "tokio"),
+    doc = r#"You need to enable the tokio feature to utilise async."#
+)]
+#![cfg_attr(
+    feature = "tokio",
+    doc = r#"
+Read a password:
+```rust,no_run
+# async {
+let passwd = readpass::async_from_tty().await?;
+# Ok::<(), std::io::Error>(())
+# };
+```
+
+If you want to display a prompt, print it to stdout or stderr before reading:
+
+
+```rust,no_run
+# let _ = async {
+use tokio::io::{self, AsyncWriteExt};
+
+io::stderr().write_all(b"Please enter a password: ").await?;
+let passwd = readpass::async_from_tty().await?;
+# Ok::<(), std::io::Error>(())
+# };
+```
+"#
+)]
+//! <br></br>
 //! [`String`]s returned by `readpass` are wrapped in [`Zeroizing`]
 //! to ensure the password is zeroized from memory after it's [`Drop`]ped.
 
@@ -68,6 +99,10 @@ mod async_support {
 
     use crate::CTRL_U;
 
+    /// Asynchronously reads a password from an `(impl AsyncBufReadExt + Unpin)`.
+    ///
+    /// This only reads the first line from the reader.
+    /// Newlines and carriage returns are trimmed from the end of the resulting [`String`].
     pub(crate) async fn async_from_bufread(
         reader: &mut (impl AsyncBufReadExt + Unpin),
     ) -> std::io::Result<Zeroizing<String>> {
@@ -180,6 +215,7 @@ mod tokio_tests {
         Cursor::new(&b"A mocked response.\nAnother mocked response.\n"[..])
     }
 
+    // Separate function as tokio panics when calling a function with #[tokio::test]
     #[tokio::test]
     async fn can_read_from_redirected_input_many_times_test() {
         let mut reader_crlf = mock_input_crlf();
